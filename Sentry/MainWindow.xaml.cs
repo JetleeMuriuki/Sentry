@@ -21,6 +21,8 @@ namespace Sentry
         // Collection to hold our mapped process data
         public ObservableCollection<ProcessInfo> RunningProcesses { get; set; }
 
+        private DispatcherTimer _processTimer;
+
         public MainWindow()
         {
             InitializeComponent();
