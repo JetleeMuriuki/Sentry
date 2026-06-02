@@ -1,15 +1,7 @@
-﻿using System.Text;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+﻿using System.Windows;
 using System.Diagnostics;
 using System.Collections.ObjectModel;
+using System.Windows.Threading;
 
 namespace Sentry
 {
@@ -18,23 +10,72 @@ namespace Sentry
     /// </summary>
     public partial class MainWindow : Window
     {
-        // Collection to hold our mapped process data
+        // Collection to hold mapped process data
         public ObservableCollection<ProcessInfo> RunningProcesses { get; set; }
 
         private DispatcherTimer _processTimer;
+        private HashSet<int> _previousProcessIds = new();
 
         public MainWindow()
         {
             InitializeComponent();
+
+            RunningProcesses = new ObservableCollection<ProcessInfo>();
+            ProcessGrid.ItemsSource = RunningProcesses;
+
             LoadProcesses();
 
-            // Set DataContext and bind the DataGrid
-            ProcessGrid.ItemsSource = RunningProcesses;
+            _previousProcessIds =
+                Process.GetProcesses()
+                    .Select(p => p.Id)
+                    .ToHashSet();
+
+            _processTimer = new DispatcherTimer();
+            _processTimer.Interval = TimeSpan.FromSeconds(2);
+            _processTimer.Tick += ProcessTimer_Tick;
+            _processTimer.Start();
+        }
+
+        private void ProcessTimer_Tick(object? sender, EventArgs e)
+        {
+            HashSet<int> currentProcessIds =
+                Process.GetProcesses()
+                       .Select(p => p.Id)
+                       .ToHashSet();
+
+            var newProcesses = currentProcessIds.Except(_previousProcessIds);
+
+            var terminatedProcesses = _previousProcessIds.Except(currentProcessIds);
+
+            foreach (var pid in newProcesses)
+            {
+                try
+                {
+                    Process process = Process.GetProcessById(pid);
+
+                    Debug.WriteLine(
+                        $"NEW PROCESS: {process.ProcessName} ({pid})");
+                }
+                catch
+                {
+                    //skip inaccessible processes
+                }
+            }
+
+            foreach (var pid in terminatedProcesses)
+            {
+                Debug.WriteLine(
+                    $"TERMINATED PROCESS: PID {pid}");
+            }
+
+            _previousProcessIds = currentProcessIds;
+
+            LoadProcesses();
         }
 
         private void LoadProcesses()
         {
-            RunningProcesses = new ObservableCollection<ProcessInfo>();
+            RunningProcesses.Clear(); //to avoid duplicating processes
 
             foreach (Process process in Process.GetProcesses())
             {
